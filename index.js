@@ -9,8 +9,6 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-
-
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const systemInstruction = `You are JARVIS, a highly advanced AI assistant created by Faisal Ahammed (address him as "Sir" or "Faisal Sir"). Your personality is modeled after Tony Stark's JARVIS — witty, calm, hyper-competent, and subtly humorous, but never robotic or repetitive.
@@ -30,7 +28,7 @@ FORMAT:
 - Address the user as "Sir" occasionally, not mechanically in every sentence.`;
 
 const sessions = {};
-const MAX_HISTORY = 10; 
+const MAX_HISTORY = 10;
 
 const generationConfig = {
   systemInstruction,
@@ -47,13 +45,20 @@ function trimHistory(sessionId) {
 }
 
 // ---------- Normal (non-streaming) handler ----------
+// ---------- Normal (non-streaming) handler ----------
 async function handleJarvis(prompt, sessionId, res) {
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
-    return res.status(400).json({ error: "Please provide a valid prompt." });
+    return res.status(400).json({
+      error: "Please provide a valid prompt.",
+    });
   }
 
   if (!sessions[sessionId]) sessions[sessionId] = [];
-  sessions[sessionId].push({ role: "user", parts: [{ text: prompt }] });
+
+  sessions[sessionId].push({
+    role: "user",
+    parts: [{ text: prompt }],
+  });
 
   try {
     const response = await ai.models.generateContent({
@@ -63,18 +68,98 @@ async function handleJarvis(prompt, sessionId, res) {
     });
 
     const answer = response.text;
-    sessions[sessionId].push({ role: "model", parts: [{ text: answer }] });
+
+    sessions[sessionId].push({
+      role: "model",
+      parts: [{ text: answer }],
+    });
+
     trimHistory(sessionId);
 
     res.json({ answer });
   } catch (error) {
-    
+    console.error("[JARVIS ERROR]", error);
+
+    const statusCode = error?.status || error?.code || error?.response?.status;
+
+    if (statusCode === 429) {
+      return res.status(429).json({
+        error: "JARVIS is busy. Please try again in a minute.",
+      });
+    }
+
     res.status(500).json({
-      error: "JARVIS Core Error: " + (error.message || "Something went wrong"),
+      error: "JARVIS Core Error: Something went wrong",
     });
   }
 }
 
+// ---------- Streaming handler ----------
+async function handleJarvisStream(prompt, sessionId, res) {
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    return res.status(400).json({
+      error: "Please provide a valid prompt.",
+    });
+  }
+
+  if (!sessions[sessionId]) sessions[sessionId] = [];
+
+  sessions[sessionId].push({
+    role: "user",
+    parts: [{ text: prompt }],
+  });
+
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Transfer-Encoding", "chunked");
+
+  let fullAnswer = "";
+
+  try {
+    const stream = await ai.models.generateContentStream({
+      model: "gemini-3.6-flash",
+      contents: sessions[sessionId],
+      config: generationConfig,
+    });
+
+    for await (const chunk of stream) {
+      const text = chunk.text;
+
+      if (text) {
+        fullAnswer += text;
+        res.write(text);
+      }
+    }
+
+    sessions[sessionId].push({
+      role: "model",
+      parts: [{ text: fullAnswer }],
+    });
+
+    trimHistory(sessionId);
+
+    res.end();
+  } catch (error) {
+    console.error("[JARVIS STREAM ERROR]", error);
+
+    const statusCode = error?.status || error?.code || error?.response?.status;
+
+    if (statusCode === 429) {
+      if (!res.headersSent) {
+        return res
+          .status(429)
+          .end("JARVIS is busy. Please try again in a minute.");
+      }
+
+      return res.end("\n\nJARVIS is busy. Please try again in a minute.");
+    }
+
+    if (!res.headersSent) {
+      res.status(500);
+    }
+
+    res.end("JARVIS Core Error: Something went wrong");
+  }
+}
 // ---------- Streaming handler ----------
 async function handleJarvisStream(prompt, sessionId, res) {
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
@@ -108,7 +193,6 @@ async function handleJarvisStream(prompt, sessionId, res) {
     trimHistory(sessionId);
     res.end();
   } catch (error) {
-    
     if (!res.headersSent) {
       res.status(500);
     }
@@ -150,8 +234,9 @@ app.get("/", (req, res) => {
 
 // 404 handler — must be after all routes
 app.use((req, res) => {
-  
-  res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
+  res
+    .status(404)
+    .json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
 });
 
 app.listen(port, () => {
