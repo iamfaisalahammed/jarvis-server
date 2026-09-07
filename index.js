@@ -9,9 +9,7 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-if (!process.env.GEMINI_API_KEY) {
-  console.error("[JARVIS] WARNING: GEMINI_API_KEY is missing in .env");
-}
+
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -32,14 +30,14 @@ FORMAT:
 - Address the user as "Sir" occasionally, not mechanically in every sentence.`;
 
 const sessions = {};
-const MAX_HISTORY = 10; // কমানো হলো — দ্রুত response এর জন্য
+const MAX_HISTORY = 10; 
 
 const generationConfig = {
   systemInstruction,
   temperature: 0.9,
   topP: 0.95,
   topK: 40,
-  maxOutputTokens: 500, // response দ্রুত আসার জন্য limit
+  maxOutputTokens: 500,
 };
 
 function trimHistory(sessionId) {
@@ -70,7 +68,7 @@ async function handleJarvis(prompt, sessionId, res) {
 
     res.json({ answer });
   } catch (error) {
-    console.error("JARVIS Core Error:", error);
+    
     res.status(500).json({
       error: "JARVIS Core Error: " + (error.message || "Something went wrong"),
     });
@@ -110,7 +108,7 @@ async function handleJarvisStream(prompt, sessionId, res) {
     trimHistory(sessionId);
     res.end();
   } catch (error) {
-    console.error("JARVIS Stream Error:", error);
+    
     if (!res.headersSent) {
       res.status(500);
     }
@@ -152,7 +150,7 @@ app.get("/", (req, res) => {
 
 // 404 handler — must be after all routes
 app.use((req, res) => {
-  console.log(`[404] ${req.method} ${req.originalUrl}`);
+  
   res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
 });
 
