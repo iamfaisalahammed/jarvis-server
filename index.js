@@ -124,7 +124,7 @@ app.post("/jarvis", (req, res) => {
   handleJarvis(prompt, sessionId, res);
 });
 
-// GET /jarvis (backward compatible — ?prompt=...&sessionId=...)
+// GET /jarvis (backward compatible — ?prompt=...&sessionId=.)
 app.get("/jarvis", (req, res) => {
   const { prompt, sessionId = "default" } = req.query || {};
   handleJarvis(prompt, sessionId, res);
